@@ -1,0 +1,158 @@
+﻿@page "/editdata"
+
+<PageTitle>Weather forecast</PageTitle>
+
+@using BlazorApp.Data
+@using Microsoft.EntityFrameworkCore
+@inject WeatherForecastService ForecastService
+@inject IDbContextFactory<WeatherDbContext> DbFactory
+
+
+<h1>Edit Weather forecast</h1>
+
+<p>This component demonstrates fetching data from a service.</p>
+
+@if (forecasts == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Temp. (C)</th>
+                <th>Temp. (F)</th>
+                <th>Summary</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var forecast in forecasts)
+            {
+                <tr>
+                    <td>@forecast.Date.ToShortDateString()</td>
+                    <td>@forecast.TemperatureC</td>
+                    <td>@forecast.TemperatureF</td>
+                    <td>@forecast.Summary</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<EditForm Model="@editModel" OnValidSubmit="@UpdateValidData">
+    Select:
+    <InputSelect @bind-Value="@SelectedIndex">
+        @{
+            int count = 0;
+            @foreach (var data in forecasts)
+            {
+                <option value="@count">@data.Date</option>
+                count++;
+            }
+        }
+    </InputSelect>
+    <DataAnnotationsValidator/>
+    <ValidationSummary/>
+    <table>
+        <tr>
+            <td>Date: </td>
+            <td><InputDate id="date" @bind-Value="editModel.Date" /></td>
+        </tr>
+        <tr>
+            <td>Temperature: </td>
+            <td><InputNumber id="temperature" @bind-Value="editModel.TemperatureC" /></td>
+        </tr>
+        <tr>
+            <td>Summary: </td>
+            <td><InputText id="summary" @bind-Value="editModel.Summary" /></td>
+        </tr>
+    </table>
+    <button type="submit" @attributes="UpdateButtonAttrs">Update</button>
+</EditForm>
+<button type="button" @onclick="AddData">@AddButtonText</button>
+<button type="button" @onclick="RemoveData" @attributes="RemoveButtonAttrs">Remove</button>
+
+@code {
+    private List<WeatherForecast> forecasts = new();
+    private WeatherForecast editModel = new();
+
+    private int _selectedIndex;
+    private int SelectedIndex
+    {
+        get => _selectedIndex;
+        set
+        {
+            _selectedIndex = value;
+            editModel = forecasts[_selectedIndex];
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var dbContext = await DbFactory.CreateDbContextAsync();
+        await dbContext.Database.EnsureCreatedAsync();
+        forecasts = dbContext.WeatherForecasts.ToList();
+        if (forecasts.Count > 0) {
+            SelectedIndex = 0;
+        }
+    }
+
+    private bool _isNewAdd;
+    private string AddButtonText = "Add";
+    private bool IsNewAdd {
+        get => _isNewAdd;
+        set
+        {
+            _isNewAdd = value;
+            AddButtonText = (!_isNewAdd) ? "Add" : "Save";
+            RemoveButtonAttrs["disable"] = (!_isNewAdd) ? false : true;
+        }
+    }
+
+
+    private async void AddData()
+    {
+        if (!IsNewAdd) {
+            editModel = new();
+            IsNewAdd = true;
+            return;
+        }
+        using var dbContext = await DbFactory.CreateDbContextAsync();
+        var newData = dbContext.WeatherForecasts.Add(editModel);
+        await dbContext.SaveChangesAsync();
+        IsNewAdd = false;
+        forecasts = dbContext.WeatherForecasts.ToList();
+    }
+
+    private Dictionary<string, object> RemoveButtonAttrs = new()
+    {
+        {"disable",false}
+    };
+
+    private async void RemoveData() {
+        using var dbContext = await DbFactory.CreateDbContextAsync();
+        var newData = dbContext.WeatherForecasts.Remove(editModel);
+        await dbContext.SaveChangesAsync();
+        forecasts = dbContext.WeatherForecasts.ToList();
+    }
+
+    private Dictionary<string, object> UpdateButtonAttrs = new()
+    {
+        {"disable",false}
+    };
+
+    private async void UpdateValidData()
+    {
+        using var dbContext = await DbFactory.CreateDbContextAsync();
+        var selModel = forecasts[SelectedIndex];
+        selModel.Date = editModel.Date;
+        selModel.TemperatureC = editModel.TemperatureC;
+        selModel.Summary = editModel.Summary;
+        var newData = dbContext.WeatherForecasts.Update(selModel);
+        await dbContext.SaveChangesAsync();
+    }
+}
+
+
